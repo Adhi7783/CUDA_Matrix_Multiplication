@@ -1,0 +1,429 @@
+CUDA MATRIX MULTIPLICATION PROJECT SPECIFICATION
+==================================================
+
+PROJECT OVERVIEW
+================
+
+This project implements three progressively optimized CUDA kernels for square 
+matrix multiplication (C = A × B) on the NVIDIA GTX 1050 Ti GPU, demonstrating 
+fundamental GPU optimization techniques from naive to production-grade performance.
+
+Target Performance: Reach 60-70% of cuBLAS library throughput through careful 
+optimization of memory hierarchy utilization and compute patterns.
+
+
+HARDWARE SPECIFICATION
+======================
+
+GPU: NVIDIA GeForce GTX 1050 Ti
+Architecture: Pascal (SM 6.1)
+CUDA Cores: 768 (6 SMs × 128 cores/SM)
+Clock Speed: ~1500 MHz
+Peak FP32: 1900 GFLOP/s (768 cores × 1500 MHz × 2 ops/cycle)
+Memory: GDDR5 128-bit bus
+Peak Memory Bandwidth: ~112 GB/s
+Cache Hierarchy:
+  ├── Registers: 4 B/cycle latency (per-thread)
+  ├── L1 Cache: 48 KB per SM, 4-cycle latency
+  ├── Shared Memory: 96 KB per SM, 4-cycle latency (configurable L1 cache)
+  ├── L2 Cache: 1 MB, 20-cycle latency
+  └── Global Memory: 2 GB GDDR5, 400-800 cycle latency
+
+Warp Size: 32 threads
+Max Threads per Block: 1024
+Max Blocks per Grid: 2^31 - 1
+
+
+KERNEL SPECIFICATIONS
+====================
+
+1. NAIVE KERNEL (kernel_v1_naive)
+   ─────────────────────────────────────────────────────────────────────────
+
+   Thread Layout:
+     • Grid: ceil(N/16) × ceil(N/16)
+     • Block: 16×16 = 256 threads
+
+   Algorithm:
+     Each thread (row, col) computes C[row][col] by dot product:
+       sum = 0
+       for k in 0..N-1:
+           sum += A[row][k] * B[k][col]
+       C[row][col] = sum
+
+   Memory Pattern:
+     • Reads per thread: 2N operations → 2N global memory loads
+     • No reuse: Every multiply reads from global memory
+     • No coalescing: Irregular access patterns
+
+   Expected Performance:
+     • N=128: ~5 ms → 0.4 GFLOP/s
+     • N=512: ~85 ms → 0.3 GFLOP/s
+     • N=1024: ~340 ms → 0.2 GFLOP/s (likely memory-bound)
+     • N=2048: ~2.7 sec → 0.2 GFLOP/s
+
+   Arithmetic Intensity:
+     AI = 2N³ (operations) / (4N² × 2) bytes = N/4 FLOP/byte
+     For N=1024: AI = 256 FLOP/byte (wait, recalculate...)
+     Actually: 2 ops per multiply, each thread does N multiplies, accesses 2N words
+     AI ≈ 2/(4×2) = 0.25 FLOP/byte (memory-bound)
+
+
+2. TILED KERNEL WITH SHARED MEMORY (kernel_v2_tiled)
+   ─────────────────────────────────────────────────────────────────────────
+
+   Two implementations: TILE=16 and TILE=32
+
+   2A. TILE=16:
+       Thread Layout:
+         • Grid: ceil(N/16) × ceil(N/16)
+         • Block: 16×16 = 256 threads
+         • Shared Memory: 2 × 16×16 × 4 bytes = 2048 bytes
+
+       Algorithm:
+         1. For each tile (tile_k from 0 to N step 16):
+            a. Load tileA[16×16] and tileB[16×16] into shared memory
+            b. __syncthreads()
+            c. For k = 0 to 15:
+                 Each thread (ty, tx) computes sum += tileA[ty][k] * tileB[k][tx]
+            d. __syncthreads() (before next tile)
+         2. Write sum to C[row][col]
+
+       Key Optimizations:
+         • Data reuse: Each global load serves 16 operations
+         • Latency: 4 cycles (shared mem) vs 600+ (global mem)
+         • Coalescing: Organized tile loads → better bus utilization
+
+       Expected Performance:
+         • N=128: ~1 ms → 2.1 GFLOP/s (5-8× speedup)
+         • N=512: ~10 ms → 27 GFLOP/s
+         • N=1024: ~28 ms → 42 GFLOP/s (good speedup)
+         • N=2048: ~225 ms → 42 GFLOP/s
+
+       Arithmetic Intensity:
+         • Per thread: 256 operations (16×16) use 16+16 = 32 words from global
+         • AI ≈ 256*4 / (32*4) = 8 FLOP/byte (better, approaching compute-bound)
+
+
+   2B. TILE=32:
+       Thread Layout:
+         • Grid: ceil(N/32) × ceil(N/32)
+         • Block: 32×32 = 1024 threads
+         • Shared Memory: 2 × 32×32 × 4 bytes = 8192 bytes
+
+       Performance Improvements:
+         • Larger tiles → more data reuse
+         • TILE² reuse for (2*TILE) data loads
+         • More global memory bandwidth utilization
+
+       Expected Performance:
+         • N=1024: ~3.5 ms → 300 GFLOP/s (6-8× speedup over TILE=16)
+         • N=2048: ~28 ms → 300 GFLOP/s
+
+
+3. REGISTER-BLOCKED KERNEL (kernel_v3_register)
+   ─────────────────────────────────────────────────────────────────────────
+
+   Thread Layout:
+     • Each thread computes a 4×4 output block
+     • Block: (32, 8) = 256 threads
+     • Grid: ceil(N/128) × ceil(N/128) [covers 128×128 per block]
+     • Shared Memory: 2 × 32×32 × 4 = 8192 bytes
+
+   Algorithm:
+     1. For each tile (tile_k from 0 to N step 32):
+        a. Load tileA[32×32] and tileB[32×32] into shared memory
+        b. For k = 0 to 31:
+           • Load 4 values into registers from tileA (vertical strip)
+           • Load 4 values into registers from tileB (horizontal strip)
+           • Update 4×4 register block: result[i][j] += valA[i] * valB[j]
+        c. Next tile
+     2. Write 4×4 result block to global C
+
+   Key Optimizations:
+     • Register usage: 0-cycle latency data
+     • Reduced shared memory contention
+     • Better compiler optimization (explicit register blocking)
+     • Higher arithmetic intensity per global load
+
+   Expected Performance:
+     • N=1024: ~2.1 ms → 500 GFLOP/s (2× speedup over TILE=32)
+     • N=2048: ~17 ms → 500 GFLOP/s
+     • ~25% of peak compute, ~70% of cuBLAS
+
+
+PERFORMANCE TARGETS
+===================
+
+Matrix Size N=1024 (2N³ = 2 billion operations):
+
+Implementation      Time (ms)   GFLOP/s   % of Peak   vs Naive
+─────────────────────────────────────────────────────────────────
+CPU Baseline        ~5          ~0.4      0.02%       1×
+Naive CUDA          ~42         ~5        0.2%        1×
+Tiled (TILE=16)     ~28         ~42       2%          8×
+Tiled (TILE=32)     ~3.5        ~300      15%         60×
+Reg-Blocked         ~2.1        ~500      25%         100×
+cuBLAS              ~1.4        ~700      37%         150×
+Peak Theoretical    -           1900      100%        -
+
+Success Criteria:
+  ✓ All kernels produce correct output (vs CPU reference)
+  ✓ Naive kernel: >0.5 GFLOP/s
+  ✓ Tiled kernel: >20 GFLOP/s
+  ✓ Register-blocked: >300 GFLOP/s
+  ✓ Reach 50%+ of cuBLAS performance
+
+
+BENCHMARK SUITE
+===============
+
+Test Sizes: N = 128, 256, 512, 1024, 2048
+
+For each size:
+  1. Run CPU reference (N ≤ 256 only, too slow for larger)
+  2. Run all GPU kernels 10 times each, average timing
+  3. Verify correctness (L2 error < 1e-4 relative)
+  4. Compute GFLOP/s and store in JSON
+
+Output Format (JSON):
+  [
+    {
+      "N": 1024,
+      "CPU": { "ms": 5.0, "gflops": 0.4 },
+      "Naive CUDA": { "ms": 42.0, "gflops": 5.0, "correct": true },
+      "Tiled (16)": { "ms": 28.0, "gflops": 42.0, "correct": true },
+      "Tiled (32)": { "ms": 3.5, "gflops": 300.0, "correct": true },
+      "Reg-Blocked": { "ms": 2.1, "gflops": 500.0, "correct": true },
+      "cuBLAS": { "ms": 1.4, "gflops": 700.0, "correct": true }
+    },
+    ...
+  ]
+
+
+BUILD SYSTEM
+============
+
+PRIMARY: Makefile (Unix/Linux)
+  • nvcc version: 11.0+
+  • Architecture: -arch=sm_61 (Pascal)
+  • Optimization: -O3
+  • Linking: -lcublas
+
+SECONDARY: CMakeLists.txt (Cross-platform)
+  • Requires: CMake 3.18+, CUDA toolkit, CUDAToolkit
+  • Targets: matmul_bench, test_correctness
+
+Build Commands:
+  make all               # Build both executables
+  make bench             # Run benchmarks
+  make test              # Run correctness tests
+  make profile           # Profile with nvprof
+  make clean             # Clean build artifacts
+
+
+PROJECT STRUCTURE
+=================
+
+include/
+  ├── utils.h                  # CUDA error checking, timers, utilities
+  │                            # • CUDA_CHECK macro for error handling
+  │                            # • GpuTimer/CpuTimer classes
+  │                            # • cpu_matmul() for reference
+  │                            # • verify_result() for correctness
+  │
+  └── kernels.h                # Kernel function declarations
+                               # • Forward declarations for all 3 versions
+                               # • cuBLAS wrapper interface
+
+src/
+  ├── kernel_v1_naive.cu       # ~30 lines: naive global memory kernel
+  │
+  ├── kernel_v2_tiled.cu       # ~60 lines: TILE=16 and TILE=32 variants
+  │                            # • Shared memory management
+  │                            # • __syncthreads() synchronization
+  │                            # • Loop tiling pattern
+  │
+  ├── kernel_v3_register.cu    # ~70 lines: register-blocked kernel
+  │                            # • Register accumulation
+  │                            # • Block-level 4×4 computation
+  │
+  ├── kernel_cublas.cu         # ~20 lines: cuBLAS wrapper
+  │                            # • cublasHandle initialization
+  │                            # • cublasSgemm call
+  │                            # • Cleanup
+  │
+  └── benchmark.cu             # ~150 lines: benchmarking harness
+                               # • Allocate/deallocate GPU memory
+                               # • CPU reference computation
+                               # • Benchmark loop with timing
+                               # • JSON output generation
+                               • Correctness verification
+
+tests/
+  └── test_correctness.cu      # ~100 lines: test suite
+                               # • Multiple test sizes (64, 128, 256)
+                               # • Test each kernel
+                               # • Report pass/fail with diagnostics
+
+python/
+  ├── benchmark_plot.py        # ~150 lines: plotting script
+  │                            # • Parse benchmark JSON
+  │                            # • Generate 3 plots:
+  │                            #   1. Execution time vs size (log scale)
+  │                            #   2. GFLOP/s bar chart at N=1024
+  │                            #   3. Speedup over CPU
+  │                            # • Save PNG and JSON output
+  │
+  └── roofline.py              # ~120 lines: roofline model
+                               # • Compute bandwidth ceiling
+                               • Peak compute ceiling
+                               • Plot operating points
+                               • Analyze memory-vs-compute-bound regions
+
+
+BUILD OUTPUT
+============
+
+Executables:
+  • bin/matmul_bench              Main benchmark suite
+  • bin/test_correctness          Correctness test suite
+
+Generated Data:
+  • results/benchmark_results.json Raw benchmark data (JSON)
+  • results/benchmark_data.json    Processed data for plotting
+  • results/matmul_benchmark.png   Performance comparison plot
+  • results/roofline_model.png     Roofline model diagram
+
+
+TESTING STRATEGY
+================
+
+1. Correctness Tests (all N):
+   • Small sizes: N = 64, 128, 256
+   • Compare each GPU output vs CPU reference
+   • L2 relative error tolerance: 1e-4
+   • Report per-kernel pass/fail
+
+2. Benchmark Tests (all sizes):
+   • Sizes: N = 128, 256, 512, 1024, 2048
+   • 10 runs per kernel (average timing)
+   • Verify correctness (if N ≤ 256)
+   • Record GFLOP/s
+   • Generate JSON output
+
+3. Roofline Analysis:
+   • Plot theoretical ceiling vs measured throughput
+   • Identify which kernels are memory-bound vs compute-bound
+   • Estimate remaining optimization headroom
+
+
+CODING STANDARDS
+================
+
+Language: CUDA C++17
+  • File extension: .cu for CUDA, .h for headers
+  • Naming: snake_case for functions, UPPER_CASE for macros
+  • Comments: Detailed kernel docs, optimization rationale
+
+Error Handling:
+  • All CUDA calls wrapped in CUDA_CHECK()
+  • Graceful exit on errors with diagnostic messages
+  • No silent failures
+
+Memory Management:
+  • Explicit cudaMalloc/cudaFree
+  • Host-side malloc/free for CPU arrays
+  • Pinned memory not used (performance not critical)
+
+Kernel Launch Pattern:
+  • Compute grid/block dimensions explicitly
+  • Verify N is aligned to block size
+  • Document assumed block topology
+
+Documentation:
+  • Every kernel has: purpose, memory pattern, expected performance
+  • README.md: complete technical reference
+  • Code comments: explain non-obvious optimizations
+
+
+DELIVERABLES CHECKLIST
+======================
+
+✓ Source Code:
+  □ kernel_v1_naive.cu            (naive global memory)
+  □ kernel_v2_tiled.cu            (tiled TILE=16 & TILE=32)
+  □ kernel_v3_register.cu         (register-blocked)
+  □ kernel_cublas.cu              (cuBLAS wrapper)
+  □ benchmark.cu                  (benchmarking harness)
+  □ test_correctness.cu           (correctness tests)
+  □ utils.h                       (utilities & macros)
+  □ kernels.h                     (declarations)
+
+✓ Build:
+  □ Makefile                      (simple make targets)
+  □ CMakeLists.txt                (CMake configuration)
+
+✓ Analysis:
+  □ python/benchmark_plot.py      (performance plots)
+  □ python/roofline.py            (roofline model)
+
+✓ Documentation:
+  □ README.md                     (complete guide)
+  □ README.txt                    (plain text version)
+  □ This specification file       (technical details)
+
+✓ Results:
+  □ results/matmul_benchmark.png  (performance plot)
+  □ results/roofline_model.png    (roofline diagram)
+  □ results/benchmark_data.json   (raw data)
+
+
+SUCCESS METRICS
+===============
+
+Correctness:
+  ✓ All kernels pass correctness tests for N ≤ 256
+  ✓ Relative L2 error < 1e-4 vs CPU reference
+
+Performance:
+  ✓ Naive: >0.5 GFLOP/s
+  ✓ Tiled-16: >20 GFLOP/s
+  ✓ Tiled-32: >100 GFLOP/s
+  ✓ Reg-Blocked: >300 GFLOP/s
+  ✓ Reach >50% of cuBLAS (>350 GFLOP/s)
+
+Optimization Understanding:
+  ✓ Explain why each optimization improves performance
+  ✓ Analyze roofline model for your kernel
+  ✓ Identify compute vs memory-bound bottlenecks
+
+Reproducibility:
+  ✓ Code compiles without warnings
+  ✓ Benchmarks produce consistent results
+  ✓ Plots generate automatically
+  ✓ JSON output preserves all raw measurements
+
+
+TIMELINE
+========
+
+Week 1: Setup + Naive Kernel
+  • CUDA toolkit validation
+  • Naive kernel correct for N=64,128,256
+  • First timing measurements
+
+Week 2: Tiled Kernel + Benchmarking
+  • Tiled (TILE=16 & TILE=32) kernels correct
+  • Benchmark harness with CUDA events
+  • Results logged for all N
+
+Week 3: Register-Blocked + cuBLAS + Plots
+  • Register-blocked kernel correct
+  • cuBLAS integration
+  • Python plots generated
+  • README with full analysis
+
+================================================================================
+End of Specification
+================================================================================

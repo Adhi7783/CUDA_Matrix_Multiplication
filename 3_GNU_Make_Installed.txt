@@ -1,0 +1,10 @@
+PS C:\Users\Omkara> winget install GnuWin32.Make
+Found GnuWin32: Make [GnuWin32.Make] Version 3.81
+This application is licensed to you by its owner.
+Microsoft is not responsible for, nor does it grant any licenses to, third-party packages.
+Downloading https://sourceforge.net/projects/gnuwin32/files/make/3.81/make-3.81.exe/download
+  ██████████████████████████████  3.22 MB / 3.22 MB
+Successfully verified installer hash
+Starting package install... 
+Successfully installed
+PS C:\Users\Omkara> fa

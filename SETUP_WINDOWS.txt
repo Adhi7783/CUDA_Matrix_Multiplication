@@ -1,0 +1,233 @@
+Windows Build Environment Setup (Visual Build Tools, CUDA Toolkit, Make)
+
+This guide installs the required tools to build and run the CUDA Matrix Multiplication project on Windows. It targets modern Windows and recommends Visual Studio 2022.
+
+Prerequisites
+- Windows 10/11 with admin privileges
+- Internet connection for downloads
+
+Overview
+- Visual C++ Build Tools (MSVC): provides cl.exe used by CUDA's host compiler
+- NVIDIA CUDA Toolkit: provides nvcc, cuBLAS, headers, and libraries
+- GNU Make (optional, used by the provided Makefile) or use CMake + MSVC
+
+1) Install Visual Studio Build Tools (MSVC) — recommended: 2022
+
+- Download: https://visualstudio.microsoft.com/downloads/
+- Under "Tools for Visual Studio", choose Visual Studio 2022 or Build Tools for Visual Studio 2022.
+- During installation check: Desktop development with C++ workload.
+- Optional components: MSVC v143 (or latest), Windows 10/11 SDK, CMake tools.
+
+Notes: Using Build Tools 2026 is fine — CUDA toolkits support current MSVC toolsets. If you encounter an error, try the 2022 toolset.
+
+2) Install NVIDIA CUDA Toolkit (includes nvcc, cuBLAS)
+
+- Download: https://developer.nvidia.com/cuda-downloads
+- Choose: OS = Windows, Architecture = x86_64, Installer Type = exe (local)
+-- Recommended CUDA Toolkit version for GTX 1050 Ti (Pascal / sm_61): CUDA 12.9
+- Run the installer as Administrator. Recommended options: Install CUDA Toolkit and cuBLAS. You can skip driver install if your driver is current.
+- After install, restart your machine if prompted.
+
+Verify CUDA installation in PowerShell:
+
+nvcc --version
+nvidia-smi
+
+If nvcc is not found, add to PATH: setx PATH "%PATH%;C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.0\bin"
+
+3) Install GNU Make (if you prefer Makefile)
+
+Option A — Chocolatey (recommended if you have Chocolatey):
+choco install make
+
+Option B — winget:
+winget install GnuWin32.Make
+
+Option C — Manual: Download GNU Make for Windows (GnuWin32) and add bin to PATH.
+
+Verify: make --version
+
+4) Install CMake (optional, recommended for cross-platform builds)
+
+Download: https://cmake.org/download/
+Verify: cmake --version
+
+5) Build the project (Make or CMake)
+
+Using Make (requires make and nvcc on PATH):
+
+cd c:\personal\CUDA\CUDA_Matrix_Multiplication
+make all
+make test
+make bench
+
+Using CMake (MSVC generator):
+
+cd c:\personal\CUDA\CUDA_Matrix_Multiplication
+mkdir build
+cd build
+cmake .. -G "Visual Studio 17 2022"   # use 2026 generator name if available
+cmake --build . --config Release
+
+6) Troubleshooting
+
+- nvcc: command not found — CUDA Toolkit not added to PATH. Add C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v<version>\bin to PATH.
+- cl.exe: command not found — Visual Build Tools not installed or Developer Command Prompt not used. Ensure MSVC installed and PATH includes MSVC bin (re-open PowerShell after install).
+- cublas_v2.h: No such file or directory — Reinstall CUDA Toolkit, ensure cuBLAS selected.
+- Driver mismatches/crashes — update NVIDIA GPU driver from NVIDIA website.
+- Make problems — use CMake + MSVC if make is unavailable.
+
+7) Verifying a successful build and run
+
+After building, run the tests and benchmark executables (paths depend on build system):
+
+# From the project root after a Make build
+./bin/test_correctness.exe
+./bin/matmul_bench.exe
+
+8) Notes about WSL2
+
+- CUDA on WSL requires NVIDIA drivers for WSL and appropriate CUDA WSL packages. See https://docs.nvidia.com/cuda/wsl-user-guide/index.html
+- If you plan to compile in WSL, prefer the Linux instructions for CUDA and use the Makefile directly.
+
+9) Where to get help
+
+- NVIDIA Developer Forums: https://forums.developer.nvidia.com/
+- Microsoft Visual Studio docs for MSVC
+- Your local IT if corporate restrictions prevent installs
+
+Commit these files to the repository so contributors have exact steps to prepare their machine.
+WINDOWS SETUP: CUDA TOOLKIT, BUILD TOOLS, AND MAKE
+===================================================
+
+This document provides complete setup steps for building this project on Windows.
+
+REQUIRED TOOLS
+==============
+
+1) NVIDIA GPU driver (latest stable)
+2) Microsoft Visual Studio 2022 Build Tools with C++ workload
+3) NVIDIA CUDA Toolkit (12.x recommended)
+4) GNU Make (or use CMake build flow)
+5) Python 3.9+ (for plotting scripts)
+
+1) INSTALL VISUAL STUDIO C++ BUILD TOOLS
+========================================
+
+CUDA on Windows requires MSVC.
+
+- Download installer:
+  https://visualstudio.microsoft.com/downloads/
+  Under Tools for Visual Studio 2022, choose Build Tools for Visual Studio 2022.
+
+- In installer, select workload:
+  Desktop development with C++
+
+- Ensure these components are included:
+  * MSVC v143 - VS 2022 C++ x64/x86 build tools
+  * Windows 10/11 SDK
+  * C++ CMake tools for Windows (optional)
+
+- Install and restart Windows.
+
+2) INSTALL CUDA TOOLKIT
+=======================
+
+- Download:
+  https://developer.nvidia.com/cuda-downloads
+
+- Choose:
+  OS: Windows
+  Architecture: x86_64
+  Version: Windows 10/11
+  Installer Type: exe (local)
+
+- During install:
+  * Keep CUDA Toolkit and cuBLAS selected
+  * If GPU driver is already up to date, driver install can be skipped
+
+- Restart Windows after installation.
+
+3) INSTALL GNU MAKE
+===================
+
+Option A: winget
+  winget install GnuWin32.Make
+
+Option B: Chocolatey
+  choco install make
+
+Option C: manual
+  Install from GnuWin32 package and add make binary to PATH.
+
+4) VERIFY INSTALLATION
+======================
+
+Open a new PowerShell terminal and run:
+
+  nvcc --version
+  make --version
+
+Check MSVC compiler from a Developer Command Prompt, or ensure VS tools are on PATH:
+
+  cl.exe
+
+If cl.exe is not recognized in regular PowerShell, use:
+- x64 Native Tools Command Prompt for VS 2022
+- Developer PowerShell for VS 2022
+
+5) BUILD THIS PROJECT
+=====================
+
+From repository root:
+
+  cd c:\personal\CUDA\CUDA_Matrix_Multiplication
+  make all
+  make test
+  make bench
+
+CMake alternative:
+
+  cd c:\personal\CUDA\CUDA_Matrix_Multiplication
+  cmake -S . -B build -G "Visual Studio 17 2022"
+  cmake --build build --config Release
+
+6) GENERATE PLOTS
+=================
+
+  cd c:\personal\CUDA\CUDA_Matrix_Multiplication\python
+  python benchmark_plot.py
+  python roofline.py
+
+Output files are written under results/.
+
+TROUBLESHOOTING
+===============
+
+nvcc not found
+- Reopen terminal after install.
+- Verify CUDA bin path exists, for example:
+  C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.x\bin
+- Add CUDA bin to PATH and reopen terminal.
+
+make not found
+- Reopen terminal.
+- Confirm make installation path is in PATH.
+- Use CMake workflow if make is unavailable.
+
+cl.exe not found
+- Install VS Build Tools C++ workload.
+- Use Developer PowerShell/Prompt for VS 2022.
+
+cuBLAS include/link errors
+- Ensure CUDA Toolkit installation included cuBLAS.
+- Verify CUDA install and refresh environment variables.
+
+NOTES FOR CONTRIBUTORS
+======================
+
+Please include tool versions when reporting issues:
+
+  nvcc --version
+  make --version
+  python --version

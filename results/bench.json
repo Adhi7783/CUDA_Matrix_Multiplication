@@ -1,0 +1,51 @@
+CUDA Matrix Multiplication Benchmark
+GPU: NVIDIA GeForce GTX 1050 Ti (Pascal, sm_61)
+======================================
+
+[
+  {
+    "N": 128,
+    "CPU": { "ms": 1.7784, "gflops": 2.36 },
+    "Naive CUDA": { "ms": 0.0490, "gflops": 85.58, "correct": true },
+    "Tiled (16)": { "ms": 0.0354, "gflops": 118.40, "correct": true },
+    "Tiled (32)": { "ms": 0.0321, "gflops": 130.81, "correct": true },
+    "Reg-Blocked": { "ms": 0.0295, "gflops": 142.24, "correct": true },
+    "cuBLAS": { "ms": 0.0236, "gflops": 177.97, "correct": true }
+  },
+  {
+    "N": 256,
+    "CPU": { "ms": 16.3434, "gflops": 2.05 },
+    "Naive CUDA": { "ms": 0.2627, "gflops": 127.75, "correct": true },
+    "Tiled (16)": { "ms": 0.1352, "gflops": 248.24, "correct": true },
+    "Tiled (32)": { "ms": 0.1320, "gflops": 254.14, "correct": true },
+    "Reg-Blocked": { "ms": 0.1270, "gflops": 264.12, "correct": true },
+    "cuBLAS": { "ms": 0.0460, "gflops": 729.95, "correct": true }
+  },
+  {
+    "N": 512,
+    "CPU": { "ms": -1.0000, "gflops": 0.00 },
+    "Naive CUDA": { "ms": 2.1939, "gflops": 122.36, "correct": true },
+    "Tiled (16)": { "ms": 0.9724, "gflops": 276.05, "correct": true },
+    "Tiled (32)": { "ms": 0.9342, "gflops": 287.35, "correct": true },
+    "Reg-Blocked": { "ms": 0.8137, "gflops": 329.89, "correct": true },
+    "cuBLAS": { "ms": 0.2030, "gflops": 1322.19, "correct": true }
+  },
+  {
+    "N": 1024,
+    "CPU": { "ms": -1.0000, "gflops": 0.00 },
+    "Naive CUDA": { "ms": 16.9535, "gflops": 126.67, "correct": true },
+    "Tiled (16)": { "ms": 6.5059, "gflops": 330.08, "correct": true },
+    "Tiled (32)": { "ms": 6.1378, "gflops": 349.88, "correct": true },
+    "Reg-Blocked": { "ms": 5.2932, "gflops": 405.71, "correct": true },
+    "cuBLAS": { "ms": 1.0665, "gflops": 2013.62, "correct": true }
+  },
+  {
+    "N": 2048,
+    "CPU": { "ms": -1.0000, "gflops": 0.00 },
+    "Naive CUDA": { "ms": 128.7520, "gflops": 133.43, "correct": true },
+    "Tiled (16)": { "ms": 51.8355, "gflops": 331.43, "correct": true },
+    "Tiled (32)": { "ms": 48.9483, "gflops": 350.98, "correct": true },
+    "Reg-Blocked": { "ms": 41.6413, "gflops": 412.57, "correct": true },
+    "cuBLAS": { "ms": 7.7942, "gflops": 2204.19, "correct": true }
+  }
+]
