@@ -311,14 +311,7 @@ Your register-blocked kernel reaches ~70% of cuBLAS performance. The remaining g
    - cuBLAS includes optimizations for mixed-precision, accumulation, etc.
    - Highly optimized by NVIDIA engineers (not feasible in one project)
 
-**Verdict:** 70% of cuBLAS performance from hand-tuned CUDA C is **excellent** and demonstrates you understand the optimization principles!
-
----
-## Interview Notes
-
-Interview talking points were moved to a local file named `interview_notes.md` that is intentionally not tracked in the repository. This keeps the public README concise while retaining the talking points locally for interview prep.
-
-See `.gitignore` for the ignored filename. If you need the talking points checked in instead, remove `interview_notes.md` from `.gitignore` and add the file to the repo.
+**Verdict:** 70% of cuBLAS performance from hand-tuned CUDA C is **excellent** and demonstrates the optimization principles!
 
 ---
 ## File Structure

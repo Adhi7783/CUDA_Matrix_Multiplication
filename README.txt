@@ -242,42 +242,7 @@ gap comes from:
    • Highly optimized by NVIDIA engineers (not feasible in one project)
 
 Verdict: 70% of cuBLAS performance from hand-tuned CUDA C is excellent and 
-demonstrates you understand the optimization principles!
-
-
-INTERVIEW TALKING POINTS
-================================================================================
-
-Q: Why does adding shared memory help so much?
-A: Shared memory has ~4-cycle latency vs 600+ cycles for global memory. That's 
-   ~150× faster! Since matrix multiply reads the same data N times (for tiling), 
-   reusing from shared memory eliminates 99% of memory stalls. The trade-off: 
-   we need to synchronize threads (__syncthreads__), which has small overhead 
-   but massive latency savings overall.
-
-Q: What's the difference between your best kernel and cuBLAS?
-A: Our register-blocked kernel reaches ~70% of cuBLAS performance. The gap 
-   comes from:
-   1. cuBLAS uses assembly (SASS) with undocumented optimizations
-   2. Different tile size (ours is fixed at 32; theirs is tuned per-GPU)
-   3. Vectorized loads (float4) which we avoided for simplicity
-   4. Highly optimized by NVIDIA engineers over years
-   
-   But 70% from hand-tuned CUDA C shows strong understanding of the fundamentals!
-
-Q: Why is the roofline model important?
-A: The roofline shows exactly where you're leaving performance on the table. If 
-   a kernel sits on the memory bandwidth line, no amount of optimization helps—
-   you need different algorithms or reduce data movement. If it hits the peak 
-   compute ceiling, you're efficient. The model predicts which optimizations 
-   will help before you code them.
-
-Q: What would you optimize next?
-A: 1. Tensor cores: If on RTX hardware, use mma.sync instructions for 10× speedup
-   2. Memory format: Use float4 vectorized loads for 4× bandwidth
-   3. Bigger tiles: Larger TILE sizes reduce global memory traffic
-   4. Async copies: Use cp.async for pipelined tile loading (Ampere+ only)
-   5. Mixed precision: Use FP16 accumulators to trade accuracy for speed
+demonstrates the optimization principles!
 
 
 FILE STRUCTURE
