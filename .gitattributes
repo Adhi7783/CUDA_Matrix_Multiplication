@@ -1,0 +1,2 @@
+*.cmd linguist-detectable=false
+*.bat linguist-detectable=false
